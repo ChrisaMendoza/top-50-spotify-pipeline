@@ -12,17 +12,6 @@ import os
 from datetime import datetime, date
 import random
 
-COUNTRIES = ["FR", "US", "JP", "BR", "GB"]
-
-QUERIES = [
-    "pop hits",
-    "top charts",
-    "hits 2025",
-    "popular music",
-    "trending songs",
-]
-
-
 def get_spotify_client():
     return spotipy.Spotify(
         auth_manager=SpotifyClientCredentials(
@@ -30,8 +19,6 @@ def get_spotify_client():
             client_secret=os.environ["SPOTIFY_CLIENT_SECRET"],
         )
     )
-
-
 
 def get_db_connection():
     return psycopg2.connect(
@@ -41,6 +28,17 @@ def get_db_connection():
         user=os.environ.get("POSTGRES_USER", "spotify"),
         password=os.environ.get("POSTGRES_PASSWORD", "spotify123"),
     )
+
+
+COUNTRIES = ["FR", "US", "JP", "BR", "GB"]
+
+QUERIES = [
+    "pop hits",
+    "top charts",
+    "hits 2025",
+    "popular music",
+    "trending songs",
+]
 
 
 def fetch_top_tracks(sp, country):

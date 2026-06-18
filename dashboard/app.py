@@ -80,7 +80,9 @@ with c1:
     if country == "Global":
         # Pas de filtre pays : on prend les meilleurs artistes sur tous les marchés
         df_artists = load("""
-            SELECT artist_name, ROUND(AVG(popularity), 1) AS avg_pop
+            SELECT artist_name,
+                   ROUND(AVG(popularity), 1) AS avg_pop,
+                   ROW_NUMBER() OVER (ORDER BY AVG(popularity) DESC) AS rank
             FROM staging.raw_tracks
             WHERE fetch_date = CURRENT_DATE
             GROUP BY artist_name
@@ -89,7 +91,9 @@ with c1:
         """)
     else:
         df_artists = load("""
-            SELECT artist_name, ROUND(AVG(popularity), 1) AS avg_pop
+            SELECT artist_name,
+                   ROUND(AVG(popularity), 1) AS avg_pop,
+                   ROW_NUMBER() OVER (ORDER BY AVG(popularity) DESC) AS rank
             FROM staging.raw_tracks
             WHERE country = %(c)s AND fetch_date = CURRENT_DATE
             GROUP BY artist_name
@@ -98,8 +102,9 @@ with c1:
         """, params={"c": country})
 
     if not df_artists.empty:
+        df_artists["label"] = df_artists["rank"].astype(str) + ". " + df_artists["artist_name"].str[:22]
         fig = go.Figure(go.Bar(
-            x=df_artists["avg_pop"], y=df_artists["artist_name"],
+            x=df_artists["avg_pop"], y=df_artists["label"],
             orientation="h",
             marker=dict(color="#1DB954", line=dict(width=0)),
             text=df_artists["avg_pop"].astype(str),
@@ -118,15 +123,25 @@ with c2:
 
     if country == "Global":
         df_top = load("""
-            SELECT track_name, artist_name, popularity
-            FROM analytics.mart_top_tracks
-            WHERE fetch_date = CURRENT_DATE
+            WITH unique_tracks AS (
+                SELECT track_name,
+                       artist_name,
+                       MAX(popularity) AS popularity
+                FROM analytics.mart_top_tracks
+                WHERE fetch_date = CURRENT_DATE
+                GROUP BY track_name, artist_name
+            )
+            SELECT track_name,
+                   artist_name,
+                   popularity,
+                   ROW_NUMBER() OVER (ORDER BY popularity DESC) AS rank
+            FROM unique_tracks
             ORDER BY popularity DESC
             LIMIT 10
         """)
     else:
         df_top = load("""
-            SELECT track_name, artist_name, popularity
+            SELECT rank, track_name, artist_name, popularity
             FROM analytics.mart_top_tracks
             WHERE country = %(c)s AND fetch_date = CURRENT_DATE
             ORDER BY rank
@@ -134,8 +149,8 @@ with c2:
         """, params={"c": country})
 
     if not df_top.empty:
-        # On crée un label "Titre · Artiste" pour chaque barre
-        df_top["label"] = df_top["track_name"].str[:22] + " · " + df_top["artist_name"].str[:16]
+        # On crée un label "Position. Titre · Artiste" pour chaque barre
+        df_top["label"] = df_top["rank"].astype(str) + ". " + df_top["track_name"].str[:20] + " · " + df_top["artist_name"].str[:16]
         n = len(df_top)
         greens = [f"#{max(0, 29 - i*2):02x}{max(100, 185 - i*8):02x}{max(30, 84 - i*5):02x}" for i in range(n)]
         fig2 = go.Figure(go.Bar(
@@ -321,8 +336,11 @@ with c7:
 
     if country == "Global":
         df_albums = load("""
-            SELECT album_name, MIN(artist_name) AS artist_name,
-                   ROUND(AVG(popularity), 1) AS avg_pop, COUNT(DISTINCT track_id) AS nb_tracks
+            SELECT album_name,
+                   MIN(artist_name) AS artist_name,
+                   ROUND(AVG(popularity), 1) AS avg_pop,
+                   COUNT(DISTINCT track_id) AS nb_tracks,
+                   ROW_NUMBER() OVER (ORDER BY AVG(popularity) DESC) AS rank
             FROM staging.raw_tracks
             WHERE fetch_date = CURRENT_DATE
             GROUP BY album_name
@@ -331,8 +349,11 @@ with c7:
         """)
     else:
         df_albums = load("""
-            SELECT album_name, MIN(artist_name) AS artist_name,
-                   ROUND(AVG(popularity), 1) AS avg_pop, COUNT(DISTINCT track_id) AS nb_tracks
+            SELECT album_name,
+                   MIN(artist_name) AS artist_name,
+                   ROUND(AVG(popularity), 1) AS avg_pop,
+                   COUNT(DISTINCT track_id) AS nb_tracks,
+                   ROW_NUMBER() OVER (ORDER BY AVG(popularity) DESC) AS rank
             FROM staging.raw_tracks
             WHERE fetch_date = CURRENT_DATE AND country = %(c)s
             GROUP BY album_name
@@ -341,8 +362,7 @@ with c7:
         """, {"c": country})
 
     if not df_albums.empty:
-        # On crée un label "Album · Artiste" pour chaque barre
-        df_albums["label"] = df_albums["album_name"].str[:20] + " · " + df_albums["artist_name"].str[:16]
+        df_albums["label"] = df_albums["rank"].astype(str) + ". " + df_albums["album_name"].str[:18] + " · " + df_albums["artist_name"].str[:16]
 
         fig_alb = go.Figure(go.Bar(
             x=df_albums["avg_pop"],
