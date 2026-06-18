@@ -1,0 +1,124 @@
+services:
+
+  postgres:
+    image: postgres:15
+    container_name: spotify_postgres
+    environment:
+      POSTGRES_USER: spotify
+      POSTGRES_PASSWORD: spotify123
+      POSTGRES_DB: spotify_db
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./sql/init.sql:/docker-entrypoint-initdb.d/init.sql
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U spotify -d spotify_db"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  zookeeper:
+    image: confluentinc/cp-zookeeper:7.5.0
+    container_name: spotify_zookeeper
+    environment:
+      ZOOKEEPER_CLIENT_PORT: 2181
+
+  kafka:
+    image: confluentinc/cp-kafka:7.5.0
+    container_name: spotify_kafka
+    depends_on:
+      - zookeeper
+    ports:
+      - "9092:9092"
+      - "29092:29092"
+    environment:
+      KAFKA_BROKER_ID: 1
+      KAFKA_ZOOKEEPER_CONNECT: zookeeper:2181
+      KAFKA_LISTENERS: PLAINTEXT://0.0.0.0:9092,PLAINTEXT_HOST://0.0.0.0:29092
+      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka:9092,PLAINTEXT_HOST://localhost:29092
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: PLAINTEXT:PLAINTEXT,PLAINTEXT_HOST:PLAINTEXT
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+
+  airflow-init:
+    image: apache/airflow:2.9.3-python3.11
+    container_name: spotify_airflow_init
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      AIRFLOW__CORE__EXECUTOR: LocalExecutor
+      AIRFLOW__DATABASE__SQL_ALCHEMY_CONN: postgresql+psycopg2://spotify:spotify123@postgres/spotify_db
+      AIRFLOW__CORE__LOAD_EXAMPLES: "false"
+      AIRFLOW__WEBSERVER__SECRET_KEY: "spotify_secret_key_12345"
+    command: >
+      bash -c "
+        pip install --quiet spotipy kafka-python &&
+        airflow db migrate &&
+        airflow users create --username admin --password admin --firstname Admin --lastname User --role Admin --email admin@spotify.com || true
+      "
+    restart: "no"
+
+  airflow-scheduler:
+    image: apache/airflow:2.9.3-python3.11
+    container_name: spotify_airflow_scheduler
+    depends_on:
+      airflow-init:
+        condition: service_completed_successfully
+    environment:
+      AIRFLOW__CORE__EXECUTOR: LocalExecutor
+      AIRFLOW__DATABASE__SQL_ALCHEMY_CONN: postgresql+psycopg2://spotify:spotify123@postgres/spotify_db
+      AIRFLOW__CORE__LOAD_EXAMPLES: "false"
+      AIRFLOW__WEBSERVER__SECRET_KEY: "spotify_secret_key_12345"
+      SPOTIFY_CLIENT_ID: ${SPOTIFY_CLIENT_ID}
+      SPOTIFY_CLIENT_SECRET: ${SPOTIFY_CLIENT_SECRET}
+    volumes:
+      - ./airflow/dags:/opt/airflow/dags
+      - ./ingestion:/opt/airflow/ingestion
+      - ./kafka:/opt/airflow/kafka
+      - ./dbt_project:/opt/airflow/dbt_project
+    command: >
+      bash -c "pip install --quiet spotipy kafka-python && airflow scheduler"
+    restart: unless-stopped
+
+  airflow-webserver:
+    image: apache/airflow:2.9.3-python3.11
+    container_name: spotify_airflow
+    depends_on:
+      airflow-init:
+        condition: service_completed_successfully
+    environment:
+      AIRFLOW__CORE__EXECUTOR: LocalExecutor
+      AIRFLOW__DATABASE__SQL_ALCHEMY_CONN: postgresql+psycopg2://spotify:spotify123@postgres/spotify_db
+      AIRFLOW__CORE__LOAD_EXAMPLES: "false"
+      AIRFLOW__WEBSERVER__SECRET_KEY: "spotify_secret_key_12345"
+      SPOTIFY_CLIENT_ID: ${SPOTIFY_CLIENT_ID}
+      SPOTIFY_CLIENT_SECRET: ${SPOTIFY_CLIENT_SECRET}
+    ports:
+      - "8080:8080"
+    volumes:
+      - ./airflow/dags:/opt/airflow/dags
+      - ./ingestion:/opt/airflow/ingestion
+      - ./kafka:/opt/airflow/kafka
+      - ./dbt_project:/opt/airflow/dbt_project
+    command: >
+      bash -c "pip install --quiet spotipy kafka-python && airflow webserver"
+    restart: unless-stopped
+
+  streamlit:
+    image: python:3.11-slim
+    container_name: spotify_dashboard
+    depends_on:
+      postgres:
+        condition: service_healthy
+    ports:
+      - "8501:8501"
+    volumes:
+      - ./dashboard:/app
+    working_dir: /app
+    command: >
+      bash -c "pip install --quiet streamlit plotly psycopg2-binary pandas &&
+               streamlit run app.py --server.port 8501 --server.address 0.0.0.0"
+
+volumes:
+  postgres_data:
