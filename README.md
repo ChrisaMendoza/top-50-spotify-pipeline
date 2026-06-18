@@ -122,7 +122,7 @@ Tu dois voir : `Listening at: http://0.0.0.0:8080`
 ### Étape 6 — Lance le consumer Kafka (dans un nouveau terminal)
 
 ```bash
-pip install kafka-python psycopg2-binary
+pip install -r requirements.txt
 python kafka/consumer.py
 ```
 
