@@ -1,3 +1,4 @@
+-- on compare la popularité d'aujourd'hui avec celle d'hier pour chaque artiste
 WITH today AS (
     SELECT artist_name, country, ROUND(AVG(popularity), 1) AS pop_today
     FROM {{ ref('stg_tracks') }}
@@ -15,6 +16,8 @@ SELECT
     t.artist_name,
     t.pop_today,
     y.pop_yesterday,
+    -- COALESCE gère le cas où l'artiste n'était pas là hier : momentum = 0 dans ce cas
+    -- score positif = l'artiste monte, négatif = il descend
     ROUND(t.pop_today - COALESCE(y.pop_yesterday, t.pop_today), 1) AS momentum_score
 FROM today t
 LEFT JOIN yesterday y ON t.artist_name = y.artist_name AND t.country = y.country

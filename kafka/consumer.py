@@ -37,17 +37,22 @@ def insert_live_track(conn, track):
 
 
 def run():
+    # localhost:29092 car ce script tourne sur le Mac, pas dans Docker
+    # c'est le port Kafka exposé dans docker-compose
     consumer = KafkaConsumer(
         TOPIC,
         bootstrap_servers="localhost:29092",
         value_deserializer=lambda v: json.loads(v.decode("utf-8")),
+        # "earliest" = lit depuis le début du topic si ce consumer n'a jamais tourné
         auto_offset_reset="earliest",
+        # group_id permet à Kafka de mémoriser où on en est dans la lecture
         group_id="spotify-consumer-group",
     )
 
     conn = get_db_connection()
     print("Consumer démarré, en attente de messages...")
 
+    # boucle infinie : le consumer reste ouvert et traite chaque message dès qu'il arrive
     for message in consumer:
         track = message.value
         insert_live_track(conn, track)

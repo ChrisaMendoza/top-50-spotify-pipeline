@@ -13,6 +13,7 @@ from datetime import datetime, date
 import random
 
 def get_spotify_client():
+    # les clés API sont dans les variables d'environnement définies dans docker-compose.yml
     return spotipy.Spotify(
         auth_manager=SpotifyClientCredentials(
             client_id=os.environ["SPOTIFY_CLIENT_ID"],
@@ -21,6 +22,7 @@ def get_spotify_client():
     )
 
 def get_db_connection():
+    # "postgres" correspond au nom du service dans docker-compose, pas localhost
     return psycopg2.connect(
         host=os.environ.get("POSTGRES_HOST", "postgres"),
         port=os.environ.get("POSTGRES_PORT", "5432"),
@@ -30,8 +32,11 @@ def get_db_connection():
     )
 
 
+# les 5 marchés qu'on surveille dans le pipeline
 COUNTRIES = ["FR", "US", "JP", "BR", "GB"]
 
+# plusieurs requêtes pour avoir plus de diversité dans les tracks récupérés
+# sinon avec une seule requête on aurait toujours les mêmes artistes
 QUERIES = [
     "pop hits",
     "top charts",
@@ -48,6 +53,7 @@ def fetch_top_tracks(sp, country):
     donc le rang est un bon proxy pour la popularité.
     On assigne un score décroissant de 95 à 50.
     """
+    # seen évite d'insérer deux fois le même track si il ressort dans plusieurs requêtes
     seen = set()
     tracks = []
     rank = 0
@@ -81,6 +87,7 @@ def insert_tracks(conn, tracks, country):
     cursor = conn.cursor()
     today = date.today()
 
+    # on efface d'abord les données du jour pour ce pays pour pouvoir relancer proprement
     cursor.execute(
         "DELETE FROM staging.raw_tracks WHERE country = %s AND fetch_date = %s",
         (country, today)

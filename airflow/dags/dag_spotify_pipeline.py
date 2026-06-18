@@ -12,9 +12,11 @@ from airflow.operators.bash import BashOperator
 from datetime import datetime, timedelta
 import sys
 
+# on ajoute ces chemins pour que Python trouve nos modules depuis le container Airflow
 sys.path.insert(0, "/opt/airflow/ingestion")
 sys.path.insert(0, "/opt/airflow/kafka")
 
+# paramètres communs à toutes les tâches, on met 2 retries au cas où l'API Spotify est lente
 default_args = {
     "owner": "chrisa",
     "retries": 2,
@@ -22,6 +24,7 @@ default_args = {
     "start_date": datetime(2026, 6, 16),
 }
 
+# catchup=False sinon Airflow essaierait de rejouer tous les runs depuis start_date
 with DAG(
     dag_id="spotify_pipeline",
     default_args=default_args,
@@ -30,6 +33,7 @@ with DAG(
     description="Pipeline complet : Spotify API → PostgreSQL → dbt → Kafka",
 ) as dag:
 
+    # les imports sont dans les fonctions pour éviter les problèmes de chemin au moment du parsing du DAG
     def ingest():
         from fetch_spotify import run
         run()
@@ -43,9 +47,10 @@ with DAG(
         python_callable=ingest,
     )
 
+    # dbt a besoin d'être installé dans le container, donc on le fait ici directement
     task_dbt = BashOperator(
-        task_id="run_dbt_models",
-        bash_command="cd /opt/airflow/dbt_project && pip install dbt-postgres --quiet && dbt run --profiles-dir .",
+    task_id="run_dbt_models",
+    bash_command="cd /opt/airflow/dbt_project && dbt run --profiles-dir .",
     )
 
     task_kafka = PythonOperator(
@@ -53,4 +58,5 @@ with DAG(
         python_callable=publish,
     )
 
+    # ordre fixe : on récupère d'abord les données, dbt transforme, puis on publie dans Kafka
     task_ingest >> task_dbt >> task_kafka

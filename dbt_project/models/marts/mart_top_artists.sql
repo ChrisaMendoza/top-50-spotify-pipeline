@@ -1,3 +1,5 @@
+-- pour chaque jour et chaque pays, on compte combien de tracks d'un artiste sont dans le top
+-- et on calcule sa popularité moyenne sur ces tracks
 SELECT
     fetch_date,
     country,

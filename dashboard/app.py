@@ -1,3 +1,6 @@
+# dashboard Streamlit pour visualiser les données du pipeline Spotify
+# se connecte directement à Postgres pour lire staging et analytics
+
 import streamlit as st
 import psycopg2
 import pandas as pd
@@ -32,9 +35,11 @@ COUNTRIES = ["FR", "US", "JP", "BR", "GB"]
 
 @st.cache_resource
 def get_conn():
+    # cache_resource garde la connexion ouverte entre les reruns Streamlit
     return psycopg2.connect(host="postgres", dbname="spotify_db", user="spotify", password="spotify123")
 
 def load(query, params=None):
+    # retourne un DataFrame vide si la requête échoue (ex : table pas encore créée)
     try:
         return pd.read_sql(query, get_conn(), params=params)
     except:

@@ -43,6 +43,7 @@ def get_todays_tracks(conn):
 
 
 def run():
+    # kafka:9092 = le service Kafka dans Docker, on sérialise chaque message en JSON
     producer = KafkaProducer(
         bootstrap_servers="kafka:9092",
         value_serializer=lambda v: json.dumps(v).encode("utf-8"),
@@ -56,8 +57,10 @@ def run():
     for track in tracks:
         producer.send(TOPIC, value=track)
         print(f"Publié : {track['track_name']} ({track['country']})")
+        # petite pause pour simuler un vrai flux temps réel, sinon tout part d'un coup
         time.sleep(0.5)
 
+    # flush() garantit que tous les messages sont bien partis avant de fermer
     producer.flush()
     print("Tous les tracks ont été publiés.")
 
