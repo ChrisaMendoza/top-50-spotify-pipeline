@@ -35,10 +35,11 @@ def get_spotify_client():
 
 def get_db_connection():
     return psycopg2.connect(
-        host="localhost",
-        dbname="spotify_db",
-        user="spotify",
-        password="spotify123",
+        host=os.environ.get("POSTGRES_HOST", "postgres"),
+        port=os.environ.get("POSTGRES_PORT", "5432"),
+        dbname=os.environ.get("POSTGRES_DB", "spotify_db"),
+        user=os.environ.get("POSTGRES_USER", "spotify"),
+        password=os.environ.get("POSTGRES_PASSWORD", "spotify123"),
     )
 
 
